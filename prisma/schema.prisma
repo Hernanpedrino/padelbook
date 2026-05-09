@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Complejo {
+  id        String   @id @default(uuid())
+  nombre    String
+  direccion String
+  telefono  String
+  email     String   @unique
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  canchas Cancha[]
+  admins  Admin[]
+
+  @@map("complejos")
+}
+
+model Cancha {
+  id         String  @id @default(uuid())
+  complejoId String  @map("complejo_id")
+  nombre     String
+  tipo       String
+  activa     Boolean @default(true)
+
+  complejo    Complejo    @relation(fields: [complejoId], references: [id])
+  turnos      Turno[]
+  turnosFijos TurnoFijo[]
+
+  @@map("canchas")
+}
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nombre       String
+  apellido     String
+  email        String   @unique
+  telefono     String?
+  passwordHash String   @map("password_hash")
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  reservas    Reserva[]
+  turnosFijos TurnoFijo[]
+
+  @@map("usuarios")
+}
+
+model Admin {
+  id           String @id @default(uuid())
+  complejoId   String @map("complejo_id")
+  nombre       String
+  email        String @unique
+  passwordHash String @map("password_hash")
+
+  complejo Complejo @relation(fields: [complejoId], references: [id])
+
+  @@map("admins")
+}
+
+model TurnoFijo {
+  id         String    @id @default(uuid())
+  canchaId   String    @map("cancha_id")
+  usuarioId  String    @map("usuario_id")
+  diaSemana  String    @map("dia_semana")
+  horaInicio String    @map("hora_inicio")
+  horaFin    String    @map("hora_fin")
+  fechaDesde DateTime  @map("fecha_desde")
+  fechaHasta DateTime? @map("fecha_hasta")
+  activo     Boolean   @default(true)
+
+  cancha  Cancha  @relation(fields: [canchaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  turnos  Turno[]
+
+  @@map("turnos_fijos")
+}
+
+model Turno {
+  id              String      @id @default(uuid())
+  canchaId        String      @map("cancha_id")
+  turnoFijoId     String?     @map("turno_fijo_id")
+  fechaHoraInicio DateTime    @map("fecha_hora_inicio")
+  fechaHoraFin    DateTime    @map("fecha_hora_fin")
+  precio          Decimal     @db.Decimal(10, 2)
+  estado          EstadoTurno @default(DISPONIBLE)
+
+  cancha    Cancha     @relation(fields: [canchaId], references: [id])
+  turnoFijo TurnoFijo? @relation(fields: [turnoFijoId], references: [id])
+  reserva   Reserva?
+
+  @@map("turnos")
+}
+
+model Reserva {
+  id        String        @id @default(uuid())
+  turnoId   String        @unique @map("turno_id")
+  usuarioId String        @map("usuario_id")
+  estado    EstadoReserva @default(CONFIRMADA)
+  creadoEn  DateTime      @default(now()) @map("creado_en")
+
+  turno   Turno   @relation(fields: [turnoId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("reservas")
+}
+
+enum EstadoTurno {
+  DISPONIBLE
+  RESERVADO
+  CANCELADO
+}
+
+enum EstadoReserva {
+  CONFIRMADA
+  CANCELADA
+}
