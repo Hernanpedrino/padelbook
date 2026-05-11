@@ -4,6 +4,7 @@ import { ComplejoController } from './complejo.controller';
 
 @Module({
   providers: [ComplejoService],
-  controllers: [ComplejoController]
+  controllers: [ComplejoController],
+  exports: [ComplejoService],
 })
 export class ComplejoModule {}
