@@ -4,8 +4,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ComplejoModule } from './modules/complejo/complejo.module';
 import { CanchaModule } from './modules/cancha/cancha.module';
 import { TurnoModule } from './modules/turno/turno.module';
+import { ReservaModule } from './modules/reserva/reserva.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ComplejoModule, CanchaModule, TurnoModule],
+  imports: [PrismaModule, AuthModule, ComplejoModule, CanchaModule, TurnoModule, ReservaModule],
 })
 export class AppModule {}
