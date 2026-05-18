@@ -8,7 +8,7 @@ class LoginDto {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(private auth: AuthService) { }
 
   @Post('admin/login')
   loginAdmin(@Body() dto: LoginDto) {
@@ -18,5 +18,15 @@ export class AuthController {
   @Post('usuario/login')
   loginUsuario(@Body() dto: LoginDto) {
     return this.auth.loginUsuario(dto.email, dto.password);
+  }
+  @Post('usuario/registro')
+  registrarUsuario(@Body() dto: {
+    nombre: string;
+    apellido: string;
+    email: string;
+    telefono: string;
+    password: string;
+  }) {
+    return this.auth.registrarUsuario(dto);
   }
 }
