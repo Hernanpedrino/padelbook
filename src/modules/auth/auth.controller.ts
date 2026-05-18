@@ -1,10 +1,14 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
 
 class LoginDto {
   email: string = '';
   password: string = '';
 }
+
 
 @Controller('auth')
 export class AuthController {
@@ -28,5 +32,11 @@ export class AuthController {
     password: string;
   }) {
     return this.auth.registrarUsuario(dto);
+  }
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('usuario/buscar')
+  buscarUsuario(@Query('email') email: string) {
+    return this.auth.buscarUsuario(email);
   }
 }
