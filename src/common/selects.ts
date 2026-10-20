@@ -7,6 +7,9 @@ export const usuarioPublicoSelect = {
   genero: true,
 };
 
+// Filtro de complejos que la app puede mostrar: los de organizaciones suspendidas no aparecen
+export const complejoVisible = { organizacion: { estado: 'ACTIVA' as const } };
+
 // Para el panel del admin, que necesita contactar al jugador
 export const usuarioContactoSelect = {
   ...usuarioPublicoSelect,

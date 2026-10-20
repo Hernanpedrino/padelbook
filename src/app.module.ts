@@ -11,6 +11,8 @@ import { PartidoModule } from './modules/partido/partido.module';
 import { TorneoModule } from './modules/torneo/torneo.module';
 import { ClaseModule } from './modules/clase/clase.module';
 import { PagoModule } from './modules/pago/pago.module';
+import { ManagerModule } from './modules/manager/manager.module';
+import { OrganizacionModule } from './modules/organizacion/organizacion.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { PagoModule } from './modules/pago/pago.module';
     TorneoModule,
     ClaseModule,
     PagoModule,
+    ManagerModule,
+    OrganizacionModule,
   ],
 })
 export class AppModule {}

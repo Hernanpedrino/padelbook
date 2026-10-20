@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { verificarCanchaLibre } from '../../common/agenda';
-import { usuarioContactoSelect } from '../../common/selects';
+import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
 import { validarFecha } from '../../common/validacion';
 
 @Injectable()
@@ -12,7 +12,7 @@ export class TurnoService {
     return this.prisma.turno.findMany({
       where: {
         estado: 'DISPONIBLE',
-        cancha: { complejoId, activa: true },
+        cancha: { complejoId, activa: true, complejo: complejoVisible },
         fechaHoraInicio: { gte: new Date() },
       },
       include: { cancha: true },

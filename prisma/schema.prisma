@@ -7,8 +7,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Cliente que contrata el servicio; lo da de alta el MANAGER
+model Organizacion {
+  id            String             @id @default(uuid())
+  nombre        String
+  cuit          String?
+  emailContacto String             @map("email_contacto")
+  telefono      String?
+  estado        EstadoOrganizacion @default(ACTIVA)
+  planId        String?            @map("plan_id")
+  // Fecha hasta la que el servicio está pago; se extiende al registrar un PagoServicio
+  vencimiento   DateTime?
+  creadoEn      DateTime           @default(now()) @map("creado_en")
+
+  plan          Plan?          @relation(fields: [planId], references: [id])
+  complejos     Complejo[]
+  admins        Admin[]
+  pagosServicio PagoServicio[]
+
+  @@map("organizaciones")
+}
+
+model Plan {
+  id            String   @id @default(uuid())
+  nombre        String   @unique
+  descripcion   String?
+  precioMensual Decimal  @map("precio_mensual") @db.Decimal(10, 2)
+  // null = sin límite
+  maxComplejos  Int?     @map("max_complejos")
+  maxCanchas    Int?     @map("max_canchas")
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+
+  organizaciones Organizacion[]
+
+  @@map("planes")
+}
+
+// Pago del servicio de la plataforma (cliente → MANAGER), distinto de Pago (jugador → complejo)
+model PagoServicio {
+  id             String     @id @default(uuid())
+  organizacionId String     @map("organizacion_id")
+  monto          Decimal    @db.Decimal(10, 2)
+  metodo         MetodoPago
+  periodoDesde   DateTime   @map("periodo_desde")
+  periodoHasta   DateTime   @map("periodo_hasta")
+  referencia     String?
+  creadoEn       DateTime   @default(now()) @map("creado_en")
+
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id])
+
+  @@map("pagos_servicio")
+}
+
 model Complejo {
   id               String   @id @default(uuid())
+  organizacionId   String   @map("organizacion_id")
   nombre           String
   direccion        String
   telefono         String
@@ -17,11 +71,12 @@ model Complejo {
   pagosHabilitados Boolean  @default(false) @map("pagos_habilitados")
   creadoEn         DateTime @default(now()) @map("creado_en")
 
-  canchas Cancha[]
-  admins  Admin[]
-  torneos Torneo[]
-  clases  Clase[]
-  pagos   Pago[]
+  organizacion Organizacion @relation(fields: [organizacionId], references: [id])
+  canchas      Cancha[]
+  admins       Admin[]
+  torneos      Torneo[]
+  clases       Clase[]
+  pagos        Pago[]
 
   @@map("complejos")
 }
@@ -64,14 +119,20 @@ model Usuario {
   @@map("usuarios")
 }
 
+// Usuarios del panel. MANAGER: sin organización. SUPERADMIN: organización.
+// ADMIN: organización + el complejo que opera.
 model Admin {
-  id           String @id @default(uuid())
-  complejoId   String @map("complejo_id")
-  nombre       String
-  email        String @unique
-  passwordHash String @map("password_hash")
+  id             String   @id @default(uuid())
+  rol            RolPanel @default(ADMIN)
+  organizacionId String?  @map("organizacion_id")
+  complejoId     String?  @map("complejo_id")
+  nombre         String
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  activo         Boolean  @default(true)
 
-  complejo Complejo @relation(fields: [complejoId], references: [id])
+  organizacion Organizacion? @relation(fields: [organizacionId], references: [id])
+  complejo     Complejo?     @relation(fields: [complejoId], references: [id])
 
   @@map("admins")
 }
@@ -253,6 +314,17 @@ model Pago {
   inscripcionClase  InscripcionClase?  @relation(fields: [inscripcionClaseId], references: [id])
 
   @@map("pagos")
+}
+
+enum RolPanel {
+  MANAGER
+  SUPERADMIN
+  ADMIN
+}
+
+enum EstadoOrganizacion {
+  ACTIVA
+  SUSPENDIDA
 }
 
 enum EstadoTurno {

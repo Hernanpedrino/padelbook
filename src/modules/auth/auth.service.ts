@@ -13,14 +13,28 @@ export class AuthService {
   ) { }
 
   async loginAdmin(email: string, password: string) {
-    const admin = await this.prisma.admin.findUnique({ where: { email } });
+    const admin = await this.prisma.admin.findUnique({
+      where: { email },
+      include: { organizacion: true },
+    });
     if (!admin) throw new UnauthorizedException('Credenciales inválidas');
 
     const valido = await bcrypt.compare(password, admin.passwordHash);
     if (!valido) throw new UnauthorizedException('Credenciales inválidas');
+    if (!admin.activo) throw new UnauthorizedException('Usuario deshabilitado');
+    if (admin.organizacion && admin.organizacion.estado !== 'ACTIVA') {
+      throw new UnauthorizedException('La cuenta de la organización está suspendida');
+    }
 
-    const payload = { sub: admin.id, email: admin.email, rol: 'admin', complejoId: admin.complejoId };
-    return { token: this.jwt.sign(payload) };
+    // Organización y complejo no van en el token: la estrategia JWT los lee de la base
+    const rol = admin.rol.toLowerCase();
+    const payload = { sub: admin.id, email: admin.email, rol };
+    return {
+      token: this.jwt.sign(payload),
+      rol,
+      nombre: admin.nombre,
+      complejoId: admin.complejoId,
+    };
   }
 
   async loginUsuario(email: string, password: string) {

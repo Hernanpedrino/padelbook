@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { complejoVisible } from '../../common/selects';
 
 @Injectable()
 export class ComplejoService {
@@ -21,6 +22,7 @@ export class ComplejoService {
 
   async findAll() {
     return this.prisma.complejo.findMany({
+      where: complejoVisible,
       include: { canchas: { where: { activa: true } } },
     });
   }

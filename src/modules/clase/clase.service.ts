@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { Categoria } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { verificarCanchaLibre } from '../../common/agenda';
-import { usuarioContactoSelect } from '../../common/selects';
+import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
 
 const conteoConfirmadas = {
@@ -122,6 +122,7 @@ export class ClaseService {
         estado: 'PUBLICADA',
         fechaHoraInicio: { gte: new Date() },
         complejoId: filtros.complejoId,
+        complejo: complejoVisible,
         nivel: filtros.nivel ? validarEnum(Categoria, filtros.nivel, 'nivel') : undefined,
       },
       include: { cancha: true, complejo: true, ...conteoConfirmadas },
@@ -138,7 +139,7 @@ export class ClaseService {
   }
 
   async inscribirse(claseId: string, usuarioId: string) {
-    const clase = await this.prisma.clase.findUnique({ where: { id: claseId } });
+    const clase = await this.prisma.clase.findFirst({ where: { id: claseId, complejo: complejoVisible } });
     if (!clase) throw new NotFoundException('Clase no encontrada');
     if (clase.estado !== 'PUBLICADA' || clase.fechaHoraInicio <= new Date()) {
       throw new BadRequestException('La clase no admite inscripciones');

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Categoria, Rama, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { usuarioPublicoSelect } from '../../common/selects';
+import { complejoVisible, usuarioPublicoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
 
 const partidoInclude = {
@@ -35,7 +35,7 @@ export class PartidoService {
             gte: desde,
             lte: filtros.hasta ? validarFecha(filtros.hasta, 'hasta') : undefined,
           },
-          cancha: filtros.complejoId ? { complejoId: filtros.complejoId } : undefined,
+          cancha: { complejoId: filtros.complejoId, complejo: complejoVisible },
         },
       },
       include: partidoInclude,

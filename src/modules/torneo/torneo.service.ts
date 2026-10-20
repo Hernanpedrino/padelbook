@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Categoria, EstadoTorneo, Rama, Usuario } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { usuarioContactoSelect, usuarioPublicoSelect } from '../../common/selects';
+import { complejoVisible, usuarioContactoSelect, usuarioPublicoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
 
 // PRIMERA es la más alta; un jugador puede jugar su categoría o una superior, nunca una inferior
@@ -138,6 +138,7 @@ export class TorneoService {
         categoria: filtros.categoria ? validarEnum(Categoria, filtros.categoria, 'categoria') : undefined,
         rama: filtros.rama ? validarEnum(Rama, filtros.rama, 'rama') : undefined,
         complejoId: filtros.complejoId,
+        complejo: complejoVisible,
       },
       include: { complejo: true, ...conteoConfirmadas },
       orderBy: { fechaInicio: 'asc' },
@@ -157,7 +158,7 @@ export class TorneoService {
   }
 
   async inscribirse(torneoId: string, usuarioId: string, companeroEmail: string) {
-    const torneo = await this.prisma.torneo.findUnique({ where: { id: torneoId } });
+    const torneo = await this.prisma.torneo.findFirst({ where: { id: torneoId, complejo: complejoVisible } });
     if (!torneo) throw new NotFoundException('Torneo no encontrado');
     if (torneo.estado !== 'PUBLICADO' || torneo.cierreInscripcion < new Date()) {
       throw new BadRequestException('La inscripción al torneo está cerrada');

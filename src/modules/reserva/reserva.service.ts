@@ -1,14 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { usuarioContactoSelect } from '../../common/selects';
+import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
 
 @Injectable()
 export class ReservaService {
   constructor(private prisma: PrismaService) {}
 
   async crear(usuarioId: string, turnoId: string) {
-    const turno = await this.prisma.turno.findUnique({
-      where: { id: turnoId },
+    const turno = await this.prisma.turno.findFirst({
+      where: { id: turnoId, cancha: { complejo: complejoVisible } },
     });
     if (!turno) throw new NotFoundException('Turno no encontrado');
     if (turno.estado !== 'DISPONIBLE') throw new BadRequestException('El turno no está disponible');
