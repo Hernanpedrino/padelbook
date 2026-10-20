@@ -23,7 +23,7 @@ export class ComplejoController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch('mi-complejo')
-  update(@Request() req: any, @Body() body: { nombre?: string; direccion?: string; telefono?: string }) {
+  update(@Request() req: any, @Body() body: { nombre?: string; direccion?: string; telefono?: string; pagosHabilitados?: boolean }) {
     return this.complejoService.update(req.user.complejoId, body);
   }
 }

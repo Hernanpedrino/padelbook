@@ -8,15 +8,20 @@ datasource db {
 }
 
 model Complejo {
-  id        String   @id @default(uuid())
-  nombre    String
-  direccion String
-  telefono  String
-  email     String   @unique
-  creadoEn  DateTime @default(now()) @map("creado_en")
+  id               String   @id @default(uuid())
+  nombre           String
+  direccion        String
+  telefono         String
+  email            String   @unique
+  // Módulo opcional de pagos: el admin lo habilita desde el panel
+  pagosHabilitados Boolean  @default(false) @map("pagos_habilitados")
+  creadoEn         DateTime @default(now()) @map("creado_en")
 
   canchas Cancha[]
   admins  Admin[]
+  torneos Torneo[]
+  clases  Clase[]
+  pagos   Pago[]
 
   @@map("complejos")
 }
@@ -31,21 +36,30 @@ model Cancha {
   complejo    Complejo    @relation(fields: [complejoId], references: [id])
   turnos      Turno[]
   turnosFijos TurnoFijo[]
+  clases      Clase[]
 
   @@map("canchas")
 }
 
 model Usuario {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   nombre       String
   apellido     String
-  email        String   @unique
+  email        String     @unique
   telefono     String?
-  passwordHash String   @map("password_hash")
-  creadoEn     DateTime @default(now()) @map("creado_en")
+  // Opcionales al registrarse; obligatorios para sumarse a partidos y torneos
+  categoria    Categoria?
+  genero       Genero?
+  passwordHash String     @map("password_hash")
+  creadoEn     DateTime   @default(now()) @map("creado_en")
 
-  reservas    Reserva[]
-  turnosFijos TurnoFijo[]
+  reservas            Reserva[]
+  turnosFijos         TurnoFijo[]
+  partidosCreados     Partido[]
+  solicitudesPartido  PartidoJugador[]
+  inscripcionesJug1   InscripcionTorneo[] @relation("Jugador1")
+  inscripcionesJug2   InscripcionTorneo[] @relation("Jugador2")
+  inscripcionesClases InscripcionClase[]
 
   @@map("usuarios")
 }
@@ -92,6 +106,7 @@ model Turno {
   cancha    Cancha     @relation(fields: [canchaId], references: [id])
   turnoFijo TurnoFijo? @relation(fields: [turnoFijoId], references: [id])
   reserva   Reserva?
+  partidos  Partido[]
 
   @@map("turnos")
 }
@@ -105,8 +120,139 @@ model Reserva {
 
   turno   Turno   @relation(fields: [turnoId], references: [id])
   usuario Usuario @relation(fields: [usuarioId], references: [id])
+  pagos   Pago[]
 
   @@map("reservas")
+}
+
+// Partido armado sobre un turno que el creador ya reservó: "se buscan 2 jugadores de 6ta"
+model Partido {
+  id                String        @id @default(uuid())
+  turnoId           String        @map("turno_id")
+  creadorId         String        @map("creador_id")
+  categoria         Categoria
+  rama              Rama
+  jugadoresBuscados Int           @map("jugadores_buscados")
+  descripcion       String?
+  estado            EstadoPartido @default(ABIERTO)
+  creadoEn          DateTime      @default(now()) @map("creado_en")
+
+  turno     Turno            @relation(fields: [turnoId], references: [id])
+  creador   Usuario          @relation(fields: [creadorId], references: [id])
+  jugadores PartidoJugador[]
+
+  @@index([turnoId])
+  @@map("partidos")
+}
+
+model PartidoJugador {
+  id        String          @id @default(uuid())
+  partidoId String          @map("partido_id")
+  usuarioId String          @map("usuario_id")
+  estado    EstadoSolicitud @default(PENDIENTE)
+  creadoEn  DateTime        @default(now()) @map("creado_en")
+
+  partido Partido @relation(fields: [partidoId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@unique([partidoId, usuarioId])
+  @@map("partido_jugadores")
+}
+
+model Torneo {
+  id                String       @id @default(uuid())
+  complejoId        String       @map("complejo_id")
+  nombre            String
+  descripcion       String?      @db.Text
+  categoria         Categoria
+  rama              Rama
+  fechaInicio       DateTime     @map("fecha_inicio")
+  fechaFin          DateTime     @map("fecha_fin")
+  cierreInscripcion DateTime     @map("cierre_inscripcion")
+  cupoParejas       Int          @map("cupo_parejas")
+  precioInscripcion Decimal      @map("precio_inscripcion") @db.Decimal(10, 2)
+  estado            EstadoTorneo @default(BORRADOR)
+  creadoEn          DateTime     @default(now()) @map("creado_en")
+
+  complejo      Complejo            @relation(fields: [complejoId], references: [id])
+  inscripciones InscripcionTorneo[]
+
+  @@map("torneos")
+}
+
+// Inscripción por pareja; queda PENDIENTE hasta que el admin la confirma
+model InscripcionTorneo {
+  id         String            @id @default(uuid())
+  torneoId   String            @map("torneo_id")
+  jugador1Id String            @map("jugador1_id")
+  jugador2Id String            @map("jugador2_id")
+  estado     EstadoInscripcion @default(PENDIENTE)
+  creadoEn   DateTime          @default(now()) @map("creado_en")
+
+  torneo   Torneo  @relation(fields: [torneoId], references: [id])
+  jugador1 Usuario @relation("Jugador1", fields: [jugador1Id], references: [id])
+  jugador2 Usuario @relation("Jugador2", fields: [jugador2Id], references: [id])
+  pagos    Pago[]
+
+  @@index([torneoId])
+  @@map("inscripciones_torneo")
+}
+
+model Clase {
+  id              String      @id @default(uuid())
+  complejoId      String      @map("complejo_id")
+  canchaId        String      @map("cancha_id")
+  profesor        String
+  nivel           Categoria?
+  descripcion     String?
+  fechaHoraInicio DateTime    @map("fecha_hora_inicio")
+  fechaHoraFin    DateTime    @map("fecha_hora_fin")
+  cupo            Int
+  precio          Decimal     @db.Decimal(10, 2)
+  estado          EstadoClase @default(PUBLICADA)
+  creadoEn        DateTime    @default(now()) @map("creado_en")
+
+  complejo      Complejo           @relation(fields: [complejoId], references: [id])
+  cancha        Cancha             @relation(fields: [canchaId], references: [id])
+  inscripciones InscripcionClase[]
+
+  @@map("clases")
+}
+
+model InscripcionClase {
+  id        String            @id @default(uuid())
+  claseId   String            @map("clase_id")
+  usuarioId String            @map("usuario_id")
+  estado    EstadoInscripcion @default(PENDIENTE)
+  creadoEn  DateTime          @default(now()) @map("creado_en")
+
+  clase   Clase   @relation(fields: [claseId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  pagos   Pago[]
+
+  @@unique([claseId, usuarioId])
+  @@map("inscripciones_clase")
+}
+
+// Pago registrado por el admin; apunta a una sola de: reserva, inscripción a torneo o a clase
+model Pago {
+  id                  String     @id @default(uuid())
+  complejoId          String     @map("complejo_id")
+  reservaId           String?    @map("reserva_id")
+  inscripcionTorneoId String?    @map("inscripcion_torneo_id")
+  inscripcionClaseId  String?    @map("inscripcion_clase_id")
+  monto               Decimal    @db.Decimal(10, 2)
+  metodo              MetodoPago
+  estado              EstadoPago @default(PENDIENTE)
+  referencia          String?
+  creadoEn            DateTime   @default(now()) @map("creado_en")
+
+  complejo          Complejo           @relation(fields: [complejoId], references: [id])
+  reserva           Reserva?           @relation(fields: [reservaId], references: [id])
+  inscripcionTorneo InscripcionTorneo? @relation(fields: [inscripcionTorneoId], references: [id])
+  inscripcionClase  InscripcionClase?  @relation(fields: [inscripcionClaseId], references: [id])
+
+  @@map("pagos")
 }
 
 enum EstadoTurno {
@@ -118,4 +264,74 @@ enum EstadoTurno {
 enum EstadoReserva {
   CONFIRMADA
   CANCELADA
+}
+
+enum Categoria {
+  PRIMERA
+  SEGUNDA
+  TERCERA
+  CUARTA
+  QUINTA
+  SEXTA
+  SEPTIMA
+  OCTAVA
+}
+
+enum Genero {
+  MASCULINO
+  FEMENINO
+}
+
+// Rama de un partido o torneo
+enum Rama {
+  MASCULINO
+  FEMENINO
+  MIXTO
+}
+
+enum EstadoPartido {
+  ABIERTO
+  COMPLETO
+  CANCELADO
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  ACEPTADA
+  RECHAZADA
+  CANCELADA
+}
+
+enum EstadoTorneo {
+  BORRADOR
+  PUBLICADO
+  INSCRIPCION_CERRADA
+  EN_CURSO
+  FINALIZADO
+  CANCELADO
+}
+
+enum EstadoClase {
+  PUBLICADA
+  CANCELADA
+}
+
+enum EstadoInscripcion {
+  PENDIENTE
+  CONFIRMADA
+  RECHAZADA
+  CANCELADA
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  MERCADOPAGO
+  OTRO
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
 }

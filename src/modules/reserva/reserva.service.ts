@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { usuarioContactoSelect } from '../../common/selects';
 
 @Injectable()
 export class ReservaService {
@@ -46,6 +47,11 @@ export class ReservaService {
         where: { id: reserva.turnoId },
         data: { estado: 'DISPONIBLE' },
       }),
+      // Sin cancha no hay partido
+      this.prisma.partido.updateMany({
+        where: { turnoId: reserva.turnoId, estado: { in: ['ABIERTO', 'COMPLETO'] } },
+        data: { estado: 'CANCELADO' },
+      }),
     ]);
 
     return reservaActualizada;
@@ -71,7 +77,8 @@ export class ReservaService {
       },
       include: {
         turno: { include: { cancha: true } },
-        usuario: true,
+        usuario: { select: usuarioContactoSelect },
+        pagos: true,
       },
       orderBy: { creadoEn: 'desc' },
     });

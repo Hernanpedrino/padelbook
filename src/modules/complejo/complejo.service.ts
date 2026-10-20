@@ -12,7 +12,7 @@ export class ComplejoService {
     });
   }
 
-  async update(id: string, data: { nombre?: string; direccion?: string; telefono?: string }) {
+  async update(id: string, data: { nombre?: string; direccion?: string; telefono?: string; pagosHabilitados?: boolean }) {
     return this.prisma.complejo.update({
       where: { id },
       data,

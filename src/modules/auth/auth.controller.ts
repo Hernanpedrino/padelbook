@@ -30,6 +30,8 @@ export class AuthController {
     email: string;
     telefono: string;
     password: string;
+    categoria?: string;
+    genero?: string;
   }) {
     return this.auth.registrarUsuario(dto);
   }

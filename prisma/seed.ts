@@ -53,6 +53,8 @@ async function main() {
       apellido: 'Perez',
       email: 'juan@gmail.com',
       telefono: '3414111111',
+      categoria: 'SEXTA',
+      genero: 'MASCULINO',
       passwordHash: await bcrypt.hash('usuario123', 10),
     },
   });

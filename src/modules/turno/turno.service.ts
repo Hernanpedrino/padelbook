@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { verificarCanchaLibre } from '../../common/agenda';
+import { usuarioContactoSelect } from '../../common/selects';
+import { validarFecha } from '../../common/validacion';
 
 @Injectable()
 export class TurnoService {
@@ -9,7 +12,7 @@ export class TurnoService {
     return this.prisma.turno.findMany({
       where: {
         estado: 'DISPONIBLE',
-        cancha: { complejoId },
+        cancha: { complejoId, activa: true },
         fechaHoraInicio: { gte: new Date() },
       },
       include: { cancha: true },
@@ -20,7 +23,7 @@ export class TurnoService {
   async findByComplejo(complejoId: string) {
     return this.prisma.turno.findMany({
       where: { cancha: { complejoId } },
-      include: { cancha: true, reserva: { include: { usuario: true } } },
+      include: { cancha: true, reserva: { include: { usuario: { select: usuarioContactoSelect } } } },
       orderBy: { fechaHoraInicio: 'asc' },
     });
   }
@@ -36,29 +39,15 @@ export class TurnoService {
     });
     if (!cancha) throw new NotFoundException('Cancha no encontrada');
 
-    const conflicto = await this.prisma.turno.findFirst({
-      where: {
-        canchaId: data.canchaId,
-        estado: { not: 'CANCELADO' },
-        OR: [
-          {
-            fechaHoraInicio: { lte: new Date(data.fechaHoraInicio) },
-            fechaHoraFin: { gt: new Date(data.fechaHoraInicio) },
-          },
-          {
-            fechaHoraInicio: { lt: new Date(data.fechaHoraFin) },
-            fechaHoraFin: { gte: new Date(data.fechaHoraFin) },
-          },
-        ],
-      },
-    });
-    if (conflicto) throw new BadRequestException('Ya existe un turno en ese horario');
+    const inicio = validarFecha(data.fechaHoraInicio, 'fechaHoraInicio');
+    const fin = validarFecha(data.fechaHoraFin, 'fechaHoraFin');
+    await verificarCanchaLibre(this.prisma, data.canchaId, inicio, fin);
 
     return this.prisma.turno.create({
       data: {
         canchaId: data.canchaId,
-        fechaHoraInicio: new Date(data.fechaHoraInicio),
-        fechaHoraFin: new Date(data.fechaHoraFin),
+        fechaHoraInicio: inicio,
+        fechaHoraFin: fin,
         precio: data.precio,
       },
       include: { cancha: true },
@@ -80,6 +69,10 @@ export class TurnoService {
       this.prisma.reserva.updateMany({
         where: { turnoId: id, estado: 'CONFIRMADA' },
         data: { estado: 'CANCELADA' },
+      }),
+      this.prisma.partido.updateMany({
+        where: { turnoId: id, estado: { in: ['ABIERTO', 'COMPLETO'] } },
+        data: { estado: 'CANCELADO' },
       }),
     ]);
 

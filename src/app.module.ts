@@ -6,8 +6,26 @@ import { CanchaModule } from './modules/cancha/cancha.module';
 import { TurnoModule } from './modules/turno/turno.module';
 import { ReservaModule } from './modules/reserva/reserva.module';
 import { TurnoFijoModule } from './modules/turno-fijo/turno-fijo.module';
+import { UsuarioModule } from './modules/usuario/usuario.module';
+import { PartidoModule } from './modules/partido/partido.module';
+import { TorneoModule } from './modules/torneo/torneo.module';
+import { ClaseModule } from './modules/clase/clase.module';
+import { PagoModule } from './modules/pago/pago.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ComplejoModule, CanchaModule, TurnoModule, ReservaModule, TurnoFijoModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ComplejoModule,
+    CanchaModule,
+    TurnoModule,
+    ReservaModule,
+    TurnoFijoModule,
+    UsuarioModule,
+    PartidoModule,
+    TorneoModule,
+    ClaseModule,
+    PagoModule,
+  ],
 })
 export class AppModule {}

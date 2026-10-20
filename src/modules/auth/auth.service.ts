@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, UnauthorizedException, NotFoundExcepti
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { Categoria, Genero } from '@prisma/client';
+import { validarEnum } from '../../common/validacion';
 
 @Injectable()
 export class AuthService {
@@ -41,6 +43,8 @@ export class AuthService {
     email: string;
     telefono: string;
     password: string;
+    categoria?: string;
+    genero?: string;
   }) {
     const existe = await this.prisma.usuario.findUnique({
       where: { email: data.email },
@@ -55,6 +59,8 @@ export class AuthService {
         apellido: data.apellido,
         email: data.email,
         telefono: data.telefono,
+        categoria: data.categoria ? validarEnum(Categoria, data.categoria, 'categoria') : undefined,
+        genero: data.genero ? validarEnum(Genero, data.genero, 'genero') : undefined,
         passwordHash,
       },
     });
