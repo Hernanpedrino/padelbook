@@ -72,9 +72,17 @@ export class TurnoService {
     if (!turno) throw new NotFoundException('Turno no encontrado');
     if (turno.estado === 'CANCELADO') throw new BadRequestException('El turno ya está cancelado');
 
-    return this.prisma.turno.update({
-      where: { id },
-      data: { estado: 'CANCELADO' },
-    });
+    const [turnoCancelado] = await this.prisma.$transaction([
+      this.prisma.turno.update({
+        where: { id },
+        data: { estado: 'CANCELADO' },
+      }),
+      this.prisma.reserva.updateMany({
+        where: { turnoId: id, estado: 'CONFIRMADA' },
+        data: { estado: 'CANCELADA' },
+      }),
+    ]);
+
+    return turnoCancelado;
   }
 }

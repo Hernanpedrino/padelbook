@@ -12,18 +12,22 @@ export class ReservaService {
     if (!turno) throw new NotFoundException('Turno no encontrado');
     if (turno.estado !== 'DISPONIBLE') throw new BadRequestException('El turno no está disponible');
 
-    const [reserva] = await this.prisma.$transaction([
-      this.prisma.reserva.create({
-        data: { turnoId, usuarioId },
-        include: { turno: { include: { cancha: { include: { complejo: true } } } } },
-      }),
-      this.prisma.turno.update({
-        where: { id: turnoId },
+    return this.prisma.$transaction(async (tx) => {
+      // Marcar el turno solo si sigue DISPONIBLE evita que dos usuarios lo reserven a la vez
+      const { count } = await tx.turno.updateMany({
+        where: { id: turnoId, estado: 'DISPONIBLE' },
         data: { estado: 'RESERVADO' },
-      }),
-    ]);
+      });
+      if (count === 0) throw new BadRequestException('El turno no está disponible');
 
-    return reserva;
+      // turnoId es único en Reserva: si hubo una reserva cancelada se reutiliza
+      return tx.reserva.upsert({
+        where: { turnoId },
+        create: { turnoId, usuarioId },
+        update: { usuarioId, estado: 'CONFIRMADA', creadoEn: new Date() },
+        include: { turno: { include: { cancha: { include: { complejo: true } } } } },
+      });
+    });
   }
 
   async cancelar(id: string, usuarioId: string) {

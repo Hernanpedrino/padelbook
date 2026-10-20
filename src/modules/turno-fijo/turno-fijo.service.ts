@@ -126,7 +126,17 @@ export class TurnoFijoService {
             throw new BadRequestException('No hay fechas disponibles en el rango seleccionado');
         }
 
-        await this.prisma.turno.createMany({ data: turnos });
+        // Cada turno generado lleva su reserva para que aparezca en mis-reservas y en el panel
+        await this.prisma.$transaction(
+            turnos.map((turno) =>
+                this.prisma.turno.create({
+                    data: {
+                        ...turno,
+                        reserva: { create: { usuarioId: turnoFijo.usuarioId } },
+                    },
+                }),
+            ),
+        );
         return { generados: turnos.length };
     }
 }
