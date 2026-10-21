@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
+import { NotificacionService } from '../notificacion/notificacion.service';
 
 @Injectable()
 export class ReservaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificaciones: NotificacionService,
+  ) {}
 
   async crear(usuarioId: string, turnoId: string) {
     const turno = await this.prisma.turno.findFirst({
@@ -38,6 +42,11 @@ export class ReservaService {
     if (!reserva) throw new NotFoundException('Reserva no encontrada');
     if (reserva.estado === 'CANCELADA') throw new BadRequestException('La reserva ya está cancelada');
 
+    const partidosActivos = await this.prisma.partido.findMany({
+      where: { turnoId: reserva.turnoId, estado: { in: ['ABIERTO', 'COMPLETO'] } },
+      select: { id: true },
+    });
+
     const [reservaActualizada] = await this.prisma.$transaction([
       this.prisma.reserva.update({
         where: { id },
@@ -54,6 +63,10 @@ export class ReservaService {
       }),
     ]);
 
+    await this.notificaciones.partidosCancelados(
+      partidosActivos.map((p) => p.id),
+      'el organizador canceló la reserva de la cancha',
+    );
     return reservaActualizada;
   }
 

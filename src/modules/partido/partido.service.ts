@@ -3,6 +3,7 @@ import { Categoria, Rama, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { complejoVisible, usuarioPublicoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
+import { NotificacionService } from '../notificacion/notificacion.service';
 
 const partidoInclude = {
   turno: { include: { cancha: { include: { complejo: true } } } },
@@ -15,7 +16,14 @@ const partidoInclude = {
 
 @Injectable()
 export class PartidoService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificaciones: NotificacionService,
+  ) {}
+
+  private descripcion(partidoId: string) {
+    return this.notificaciones.descripcionPartido(partidoId);
+  }
 
   async listarAbiertos(filtros: {
     categoria?: string;
@@ -129,15 +137,22 @@ export class PartidoService {
     if (existente) {
       if (existente.estado === 'RECHAZADA') throw new BadRequestException('Tu solicitud fue rechazada');
       if (existente.estado !== 'CANCELADA') throw new BadRequestException('Ya tenés una solicitud en este partido');
-      return this.prisma.partidoJugador.update({
-        where: { id: existente.id },
-        data: { estado: 'PENDIENTE', creadoEn: new Date() },
-      });
     }
 
-    return this.prisma.partidoJugador.create({
-      data: { partidoId, usuarioId },
+    const solicitud = existente
+      ? await this.prisma.partidoJugador.update({
+          where: { id: existente.id },
+          data: { estado: 'PENDIENTE', creadoEn: new Date() },
+        })
+      : await this.prisma.partidoJugador.create({ data: { partidoId, usuarioId } });
+
+    await this.notificaciones.notificar([partido.creadorId], {
+      tipo: 'SOLICITUD_PARTIDO',
+      titulo: 'Quieren sumarse a tu partido',
+      cuerpo: `${usuario.nombre} ${usuario.apellido} pidió sumarse a tu partido del ${await this.descripcion(partidoId)}`,
+      refId: partidoId,
     });
+    return solicitud;
   }
 
   async responderSolicitud(partidoId: string, solicitudId: string, creadorId: string, estado: string) {
@@ -145,7 +160,7 @@ export class PartidoService {
       throw new BadRequestException('estado debe ser ACEPTADA o RECHAZADA');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const { respuesta, completo } = await this.prisma.$transaction(async (tx) => {
       const partido = await tx.partido.findUnique({ where: { id: partidoId } });
       if (!partido) throw new NotFoundException('Partido no encontrado');
       if (partido.creadorId !== creadorId) throw new ForbiddenException('Solo el creador puede responder solicitudes');
@@ -156,23 +171,44 @@ export class PartidoService {
       });
       if (!solicitud) throw new NotFoundException('Solicitud pendiente no encontrada');
 
+      let completo = false;
       if (estado === 'ACEPTADA') {
         const aceptados = await tx.partidoJugador.count({ where: { partidoId, estado: 'ACEPTADA' } });
         if (aceptados >= partido.jugadoresBuscados) throw new BadRequestException('El partido ya está completo');
         if (aceptados + 1 === partido.jugadoresBuscados) {
           await tx.partido.update({ where: { id: partidoId }, data: { estado: 'COMPLETO' } });
+          completo = true;
         }
       }
 
-      return tx.partidoJugador.update({
+      const respuesta = await tx.partidoJugador.update({
         where: { id: solicitudId },
         data: { estado },
       });
+      return { respuesta, completo };
     });
+
+    const descripcion = await this.descripcion(partidoId);
+    await this.notificaciones.notificar([respuesta.usuarioId], estado === 'ACEPTADA'
+      ? { tipo: 'SOLICITUD_ACEPTADA', titulo: '¡Te confirmaron en el partido!', cuerpo: `Jugás el ${descripcion}`, refId: partidoId }
+      : { tipo: 'SOLICITUD_RECHAZADA', titulo: 'No quedaste en el partido', cuerpo: `El organizador del partido del ${descripcion} no aceptó tu solicitud`, refId: partidoId });
+    if (completo) {
+      await this.notificaciones.notificar([creadorId], {
+        tipo: 'PARTIDO_COMPLETO',
+        titulo: '¡Tu partido está completo!',
+        cuerpo: `Ya están todos para el ${descripcion}`,
+        refId: partidoId,
+      });
+    }
+    return respuesta;
   }
 
   async salir(partidoId: string, usuarioId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const anterior = await this.prisma.partidoJugador.findUnique({
+      where: { partidoId_usuarioId: { partidoId, usuarioId } },
+      include: { partido: true, usuario: true },
+    });
+    const resultado = await this.prisma.$transaction(async (tx) => {
       const solicitud = await tx.partidoJugador.findUnique({
         where: { partidoId_usuarioId: { partidoId, usuarioId } },
         include: { partido: true },
@@ -191,7 +227,19 @@ export class PartidoService {
         data: { estado: 'CANCELADA' },
       });
     });
+
+    // Al organizador solo le importa si se baja alguien que ya estaba confirmado
+    if (anterior?.estado === 'ACEPTADA') {
+      await this.notificaciones.notificar([anterior.partido.creadorId], {
+        tipo: 'JUGADOR_SE_BAJO',
+        titulo: 'Un jugador se bajó de tu partido',
+        cuerpo: `${anterior.usuario.nombre} ${anterior.usuario.apellido} se bajó del partido del ${await this.descripcion(partidoId)}. El partido vuelve a buscar jugadores.`,
+        refId: partidoId,
+      });
+    }
+    return resultado;
   }
+
 
   async cancelar(partidoId: string, creadorId: string) {
     const partido = await this.prisma.partido.findUnique({ where: { id: partidoId } });
@@ -199,9 +247,11 @@ export class PartidoService {
     if (partido.creadorId !== creadorId) throw new ForbiddenException('Solo el creador puede cancelar el partido');
     if (partido.estado === 'CANCELADO') throw new BadRequestException('El partido ya está cancelado');
 
-    return this.prisma.partido.update({
+    const cancelado = await this.prisma.partido.update({
       where: { id: partidoId },
       data: { estado: 'CANCELADO' },
     });
+    await this.notificaciones.partidosCancelados([partidoId], 'lo canceló el organizador');
+    return cancelado;
   }
 }

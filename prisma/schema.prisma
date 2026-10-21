@@ -82,6 +82,37 @@ model Complejo {
   @@map("complejos")
 }
 
+// Aviso de un evento para el jugador (lo confirmaron en un partido, una inscripción, etc.)
+model Notificacion {
+  id        String   @id @default(uuid())
+  usuarioId String   @map("usuario_id")
+  tipo      String
+  titulo    String
+  cuerpo    String
+  // Id del partido, torneo, clase o reserva al que lleva la notificación
+  refId     String?  @map("ref_id")
+  leida     Boolean  @default(false)
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, creadoEn])
+  @@map("notificaciones")
+}
+
+// Celular registrado para recibir notificaciones push (token de Firebase Cloud Messaging)
+model Dispositivo {
+  token         String   @id @db.VarChar(512)
+  usuarioId     String   @map("usuario_id")
+  plataforma    String
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("dispositivos")
+}
+
 // Complejos que el jugador marcó como favoritos en la app
 model Favorito {
   usuarioId  String   @map("usuario_id")
@@ -130,6 +161,8 @@ model Usuario {
   inscripcionesJug2   InscripcionTorneo[] @relation("Jugador2")
   inscripcionesClases InscripcionClase[]
   favoritos           Favorito[]
+  notificaciones      Notificacion[]
+  dispositivos        Dispositivo[]
 
   @@map("usuarios")
 }

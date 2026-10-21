@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { verificarCanchaLibre } from '../../common/agenda';
 import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
+import { NotificacionService, fechaCorta } from '../notificacion/notificacion.service';
 
 const conteoConfirmadas = {
   _count: { select: { inscripciones: { where: { estado: 'CONFIRMADA' as const } } } },
@@ -14,7 +15,10 @@ export const claseActiva = () => ({ estado: 'PUBLICADA' as const, fechaHoraInici
 
 @Injectable()
 export class ClaseService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificaciones: NotificacionService,
+  ) {}
 
   // --- Admin ---
 
@@ -79,6 +83,11 @@ export class ClaseService {
     if (!clase) throw new NotFoundException('Clase no encontrada');
     if (clase.estado === 'CANCELADA') throw new BadRequestException('La clase ya está cancelada');
 
+    const inscriptos = await this.prisma.inscripcionClase.findMany({
+      where: { claseId: id, estado: { in: ['PENDIENTE', 'CONFIRMADA'] } },
+      include: { clase: { include: { complejo: true } } },
+    });
+
     const [claseCancelada] = await this.prisma.$transaction([
       this.prisma.clase.update({ where: { id }, data: { estado: 'CANCELADA' } }),
       this.prisma.inscripcionClase.updateMany({
@@ -86,6 +95,13 @@ export class ClaseService {
         data: { estado: 'CANCELADA' },
       }),
     ]);
+
+    await this.notificaciones.notificar(inscriptos.map((i) => i.usuarioId), {
+      tipo: 'CLASE_CANCELADA',
+      titulo: 'Se canceló una clase',
+      cuerpo: `${clase.profesor} no va a dar la clase del ${fechaCorta(clase.fechaHoraInicio)}${inscriptos[0] ? ` en ${inscriptos[0].clase.complejo.nombre}` : ''}`,
+      refId: id,
+    });
     return claseCancelada;
   }
 
@@ -105,7 +121,7 @@ export class ClaseService {
       throw new BadRequestException('estado debe ser CONFIRMADA o RECHAZADA');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const actualizada = await this.prisma.$transaction(async (tx) => {
       const inscripcion = await tx.inscripcionClase.findFirst({
         where: { id: inscripcionId, clase: { complejoId } },
         include: { clase: true },
@@ -123,8 +139,16 @@ export class ClaseService {
       return tx.inscripcionClase.update({
         where: { id: inscripcionId },
         data: { estado },
+        include: { clase: { include: { complejo: true } } },
       });
     });
+
+    const { clase } = actualizada;
+    const cuando = `${fechaCorta(clase.fechaHoraInicio)} en ${clase.complejo.nombre}`;
+    await this.notificaciones.notificar([actualizada.usuarioId], estado === 'CONFIRMADA'
+      ? { tipo: 'INSCRIPCION_CLASE_CONFIRMADA', titulo: '¡Clase confirmada!', cuerpo: `Te esperamos el ${cuando} con ${clase.profesor}`, refId: clase.id }
+      : { tipo: 'INSCRIPCION_CLASE_RECHAZADA', titulo: 'Inscripción a clase rechazada', cuerpo: `No quedó tu lugar en la clase del ${cuando}`, refId: clase.id });
+    return actualizada;
   }
 
   // --- Usuario ---

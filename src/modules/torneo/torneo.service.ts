@@ -3,6 +3,7 @@ import { Categoria, EstadoTorneo, Rama, Usuario } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { complejoVisible, usuarioContactoSelect, usuarioPublicoSelect } from '../../common/selects';
 import { validarEnum, validarEnteroPositivo, validarFecha } from '../../common/validacion';
+import { NotificacionService } from '../notificacion/notificacion.service';
 
 // PRIMERA es la más alta; un jugador puede jugar su categoría o una superior, nunca una inferior
 const ordenCategorias = Object.values(Categoria);
@@ -29,7 +30,10 @@ type DatosTorneo = {
 
 @Injectable()
 export class TorneoService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificaciones: NotificacionService,
+  ) {}
 
   // --- Admin ---
 
@@ -119,7 +123,7 @@ export class TorneoService {
       throw new BadRequestException('estado debe ser CONFIRMADA o RECHAZADA');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const actualizada = await this.prisma.$transaction(async (tx) => {
       const inscripcion = await tx.inscripcionTorneo.findFirst({
         where: { id: inscripcionId, torneo: { complejoId } },
         include: { torneo: true },
@@ -137,8 +141,25 @@ export class TorneoService {
       return tx.inscripcionTorneo.update({
         where: { id: inscripcionId },
         data: { estado },
+        include: { torneo: { include: { complejo: true } } },
       });
     });
+
+    const { torneo } = actualizada;
+    await this.notificaciones.notificar([actualizada.jugador1Id, actualizada.jugador2Id], estado === 'CONFIRMADA'
+      ? {
+          tipo: 'INSCRIPCION_TORNEO_CONFIRMADA',
+          titulo: '¡Inscripción confirmada!',
+          cuerpo: `Ya están adentro de ${torneo.nombre} en ${torneo.complejo.nombre}`,
+          refId: torneo.id,
+        }
+      : {
+          tipo: 'INSCRIPCION_TORNEO_RECHAZADA',
+          titulo: 'Inscripción rechazada',
+          cuerpo: `${torneo.complejo.nombre} no aceptó la inscripción a ${torneo.nombre}`,
+          refId: torneo.id,
+        });
+    return actualizada;
   }
 
   // --- Usuario ---
@@ -204,7 +225,7 @@ export class TorneoService {
     });
     if (confirmadas >= torneo.cupoParejas) throw new BadRequestException('El torneo está completo');
 
-    return this.prisma.inscripcionTorneo.create({
+    const inscripcion = await this.prisma.inscripcionTorneo.create({
       data: { torneoId, jugador1Id: jugador.id, jugador2Id: companero.id },
       include: {
         torneo: true,
@@ -212,6 +233,14 @@ export class TorneoService {
         jugador2: { select: usuarioPublicoSelect },
       },
     });
+
+    await this.notificaciones.notificar([companero.id], {
+      tipo: 'INSCRIPTO_POR_COMPANERO',
+      titulo: 'Te anotaron en un torneo',
+      cuerpo: `${jugador.nombre} ${jugador.apellido} te inscribió como pareja en ${torneo.nombre}. Queda pendiente de confirmación del complejo.`,
+      refId: torneo.id,
+    });
+    return inscripcion;
   }
 
   async cancelarInscripcion(inscripcionId: string, usuarioId: string) {

@@ -3,10 +3,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { verificarCanchaLibre } from '../../common/agenda';
 import { complejoVisible, usuarioContactoSelect } from '../../common/selects';
 import { validarFecha } from '../../common/validacion';
+import { NotificacionService, fechaCorta } from '../notificacion/notificacion.service';
 
 @Injectable()
 export class TurnoService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificaciones: NotificacionService,
+  ) {}
 
   async findDisponiblesByComplejo(complejoId: string) {
     return this.prisma.turno.findMany({
@@ -61,6 +65,13 @@ export class TurnoService {
     if (!turno) throw new NotFoundException('Turno no encontrado');
     if (turno.estado === 'CANCELADO') throw new BadRequestException('El turno ya está cancelado');
 
+    // Se leen antes de cancelar para saber a quién avisar
+    const [reserva, partidos, cancha] = await Promise.all([
+      this.prisma.reserva.findFirst({ where: { turnoId: id, estado: 'CONFIRMADA' } }),
+      this.prisma.partido.findMany({ where: { turnoId: id, estado: { in: ['ABIERTO', 'COMPLETO'] } }, select: { id: true } }),
+      this.prisma.cancha.findUnique({ where: { id: turno.canchaId }, include: { complejo: true } }),
+    ]);
+
     const [turnoCancelado] = await this.prisma.$transaction([
       this.prisma.turno.update({
         where: { id },
@@ -76,6 +87,15 @@ export class TurnoService {
       }),
     ]);
 
+    await this.notificaciones.partidosCancelados(partidos.map((p) => p.id), 'el complejo canceló el turno');
+    if (reserva) {
+      await this.notificaciones.notificar([reserva.usuarioId], {
+        tipo: 'TURNO_CANCELADO',
+        titulo: 'El complejo canceló tu reserva',
+        cuerpo: `${cancha?.complejo.nombre ?? 'El complejo'} canceló tu turno del ${fechaCorta(turno.fechaHoraInicio)} en la ${cancha?.nombre ?? 'cancha'}`,
+        refId: reserva.id,
+      });
+    }
     return turnoCancelado;
   }
 }
