@@ -9,6 +9,9 @@ const conteoConfirmadas = {
   _count: { select: { inscripciones: { where: { estado: 'CONFIRMADA' as const } } } },
 };
 
+// Clases donde todavía tiene sentido confirmar o rechazar inscripciones
+export const claseActiva = () => ({ estado: 'PUBLICADA' as const, fechaHoraInicio: { gte: new Date() } });
+
 @Injectable()
 export class ClaseService {
   constructor(private prisma: PrismaService) {}
@@ -16,11 +19,21 @@ export class ClaseService {
   // --- Admin ---
 
   async findByComplejo(complejoId: string) {
-    return this.prisma.clase.findMany({
-      where: { complejoId },
-      include: { cancha: true, ...conteoConfirmadas },
-      orderBy: { fechaHoraInicio: 'desc' },
-    });
+    const [clases, pendientes] = await Promise.all([
+      this.prisma.clase.findMany({
+        where: { complejoId },
+        include: { cancha: true, ...conteoConfirmadas },
+        orderBy: { fechaHoraInicio: 'desc' },
+      }),
+      this.prisma.inscripcionClase.groupBy({
+        by: ['claseId'],
+        where: { estado: 'PENDIENTE', clase: { complejoId, ...claseActiva() } },
+        _count: true,
+      }),
+    ]);
+    // Inscripciones que esperan que el admin las confirme o rechace
+    const porClase = new Map(pendientes.map((p) => [p.claseId, p._count]));
+    return clases.map((c) => ({ ...c, pendientes: porClase.get(c.id) ?? 0 }));
   }
 
   async crear(complejoId: string, data: {

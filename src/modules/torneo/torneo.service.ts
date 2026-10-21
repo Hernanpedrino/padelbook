@@ -11,6 +11,9 @@ const conteoConfirmadas = {
   _count: { select: { inscripciones: { where: { estado: 'CONFIRMADA' as const } } } },
 };
 
+// Torneos donde todavía tiene sentido confirmar o rechazar inscripciones
+export const torneoActivo = { estado: { notIn: ['CANCELADO' as const, 'FINALIZADO' as const] } };
+
 type DatosTorneo = {
   nombre?: string;
   descripcion?: string;
@@ -31,11 +34,21 @@ export class TorneoService {
   // --- Admin ---
 
   async findByComplejo(complejoId: string) {
-    return this.prisma.torneo.findMany({
-      where: { complejoId },
-      include: conteoConfirmadas,
-      orderBy: { fechaInicio: 'desc' },
-    });
+    const [torneos, pendientes] = await Promise.all([
+      this.prisma.torneo.findMany({
+        where: { complejoId },
+        include: conteoConfirmadas,
+        orderBy: { fechaInicio: 'desc' },
+      }),
+      this.prisma.inscripcionTorneo.groupBy({
+        by: ['torneoId'],
+        where: { estado: 'PENDIENTE', torneo: { complejoId, ...torneoActivo } },
+        _count: true,
+      }),
+    ]);
+    // Inscripciones que esperan que el admin las confirme o rechace
+    const porTorneo = new Map(pendientes.map((p) => [p.torneoId, p._count]));
+    return torneos.map((t) => ({ ...t, pendientes: porTorneo.get(t.id) ?? 0 }));
   }
 
   async crear(complejoId: string, data: DatosTorneo) {
