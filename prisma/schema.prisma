@@ -77,8 +77,22 @@ model Complejo {
   torneos      Torneo[]
   clases       Clase[]
   pagos        Pago[]
+  favoritos    Favorito[]
 
   @@map("complejos")
+}
+
+// Complejos que el jugador marcó como favoritos en la app
+model Favorito {
+  usuarioId  String   @map("usuario_id")
+  complejoId String   @map("complejo_id")
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  complejo Complejo @relation(fields: [complejoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, complejoId])
+  @@map("favoritos")
 }
 
 model Cancha {
@@ -115,6 +129,7 @@ model Usuario {
   inscripcionesJug1   InscripcionTorneo[] @relation("Jugador1")
   inscripcionesJug2   InscripcionTorneo[] @relation("Jugador2")
   inscripcionesClases InscripcionClase[]
+  favoritos           Favorito[]
 
   @@map("usuarios")
 }
