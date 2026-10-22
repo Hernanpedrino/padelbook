@@ -3,8 +3,12 @@ import { readFileSync } from 'fs';
 import { App, cert, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 
-// Errores de FCM que indican que el token ya no sirve y hay que borrarlo
-const TOKENS_INVALIDOS = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'];
+// Errores de FCM que indican que el destino ya no sirve y hay que borrarlo
+const DESTINOS_INVALIDOS = [
+  'messaging/installation-id-not-registered',
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+];
 
 // Envío de notificaciones push con Firebase Cloud Messaging.
 // Queda apagado si no está FIREBASE_SERVICE_ACCOUNT (ruta al JSON de la cuenta de servicio).
@@ -31,19 +35,20 @@ export class PushService {
     return this.app;
   }
 
-  // Devuelve los tokens que FCM rechazó como inválidos, para borrarlos
-  async enviar(tokens: string[], mensaje: { titulo: string; cuerpo: string; data: Record<string, string> }) {
+  // Los destinos son Firebase Installation IDs (FID) que registra la app.
+  // Devuelve los que FCM rechazó como inválidos, para borrarlos.
+  async enviar(fids: string[], mensaje: { titulo: string; cuerpo: string; data: Record<string, string> }) {
     const app = this.firebase();
-    if (!app || tokens.length === 0) return [];
+    if (!app || fids.length === 0) return [];
 
     const respuesta = await getMessaging(app).sendEachForMulticast({
-      tokens,
+      fids,
       notification: { title: mensaje.titulo, body: mensaje.cuerpo },
       data: mensaje.data,
       android: { priority: 'high', notification: { channelId: 'padel_avisos' } },
     });
     return respuesta.responses
-      .map((r, i) => (r.error && TOKENS_INVALIDOS.includes(r.error.code) ? tokens[i] : null))
-      .filter((t): t is string => t !== null);
+      .map((r, i) => (r.error && DESTINOS_INVALIDOS.includes(r.error.code) ? fids[i] : null))
+      .filter((f): f is string => f !== null);
   }
 }

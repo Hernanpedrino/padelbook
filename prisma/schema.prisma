@@ -100,7 +100,7 @@ model Notificacion {
   @@map("notificaciones")
 }
 
-// Celular registrado para recibir notificaciones push (token de Firebase Cloud Messaging)
+// Celular registrado para recibir notificaciones push. token = Firebase Installation ID (FID)
 model Dispositivo {
   token         String   @id @db.VarChar(512)
   usuarioId     String   @map("usuario_id")
